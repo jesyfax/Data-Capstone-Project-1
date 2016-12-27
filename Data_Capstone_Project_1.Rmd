@@ -1,0 +1,133 @@
+---
+title: "Data Capstone Project 1"
+author: "Jesin"
+date: "December 27, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE,message=FALSE)
+```
+
+#Exploratory analysis of HC Corpora
+
+The data is from a corpus called HC Corpora (http://www.corpora.heliohost.org). See the readme file at http://www.corpora.heliohost.org/aboutcorpus.html for details on the corpora available. The files have been language filtered but may still contain some foreign text. In this capstone we will be applying data science in the area of natural language processing.
+
+The first step in building a predictive model for text is understanding the distribution and relationship between the words, tokens, and phrases in the text. The goal of this task is to understand the basic relationships you observe in the data and prepare to build your first linguistic models.
+
+Tasks to accomplish
+
+Exploratory analysis - perform a thorough exploratory analysis of the data, understanding the distribution of words and relationship between the words in the corpora.
+Understand frequencies of words and word pairs - build figures and tables to understand variation in the frequencies of words and word pairs in the data.
+Questions to consider
+
+Some words are more frequent than others - what are the distributions of word frequencies?
+What are the frequencies of 2-grams and 3-grams in the dataset?
+How many unique words do you need in a frequency sorted dictionary to cover 50% of all word instances in the language? 90%?
+How do you evaluate how many of the words come from foreign languages?
+Can you think of a way to increase the coverage - identifying words that may not be in the corpora or using a smaller number of words in the dictionary to cover the same number of phrases?
+
+##Loading libraries, setting seed and setting directory
+
+```{r}
+library(tm)
+library(XML)
+library(wordcloud)
+library(RColorBrewer)
+library(caret)
+library(NLP)
+library(openNLP)
+library(RWeka)
+library(qdap)
+library(ggplot2)
+library(stringi)
+library(dplyr)
+library(gridExtra)
+
+```
+
+##Loading files and doing pre-processing 
+#### Data is downloaded and unpacked to the current data folder.
+#### !!! All the data is qute big, more than 500 mb and contain millions of sentences.
+####The Data and structuring is studied well before processing
+
+```{r}
+enBlogs <- readLines(paste(getwd(),"/en_US/en_US.blogs.txt",sep=""))
+enNews <- readLines(paste(getwd(),"/en_US/en_US.news.txt",sep=""))
+enTwitter <- readLines(paste(getwd(),"/en_US/en_US.twitter.txt",sep=""))
+
+sampleBlogs <- sample(enBlogs,1000)
+sampleNews <- sample(enNews,1000)
+sampleTwitter <- sample(enTwitter,1000)
+sample <- c(sampleBlogs,sampleNews,sampleTwitter)
+txt <- sent_detect(sample)
+remove(sampleBlogs,sampleNews,sampleTwitter,enBlogs,enNews,enTwitter,sample)
+```
+###Removing everything we do not need
+```{r}
+txt <- removeNumbers(txt)
+txt <- removePunctuation(txt)
+txt <- stripWhitespace(txt)
+txt <- tolower(txt)
+txt <- txt[which(txt!="")]
+txt <- data.frame(txt,stringsAsFactors = FALSE)
+```
+###Making ordered data frames of 1-grams, 2-grams, 3-grams
+```{r}
+words<-WordTokenizer(txt) 
+grams<-NGramTokenizer(txt)
+
+for(i in 1:length(grams)) 
+{if(length(WordTokenizer(grams[i]))==2) break}
+for(j in 1:length(grams)) 
+{if(length(WordTokenizer(grams[j]))==1) break}
+
+onegrams <- data.frame(table(words))
+onegrams <- onegrams[order(onegrams$Freq, decreasing = TRUE),]
+bigrams <- data.frame(table(grams[i:(j-1)]))
+bigrams <- bigrams[order(bigrams$Freq, decreasing = TRUE),]
+trigrams <- data.frame(table(grams[1:(i-1)]))
+trigrams <- trigrams[order(trigrams$Freq, decreasing = TRUE),]
+remove(i,j,grams)
+```
+###Some words are more frequent than others - what are the distributions of word frequencies?
+```{r}
+wordcloud(words, scale=c(5,0.1), max.words=100, random.order=FALSE, 
+          rot.per=0.5, use.r.layout=FALSE, colors=brewer.pal(8,"Accent"))
+```
+```{r}
+wordcloud(onegrams$words, onegrams$Freq, scale=c(5,0.5), max.words=300, random.order=FALSE, 
+          rot.per=0.5, use.r.layout=FALSE, colors=brewer.pal(8,"Accent"))
+```
+The first graph shows the distribution of words in the corpora except such words, as "the", "a", "of", "to", etc. The second graph - the distribution of all single wors. The frequences lay between 3796 to 1.
+
+##What are the frequencies of 2-grams and 3-grams in the dataset?
+```{r}
+barplot(bigrams[1:20,2],col="lightblue",
+        names.arg = bigrams$Var1[1:20],srt = 45,
+        space=0.1, xlim=c(0,20),las=2)
+```
+```{r}
+barplot(trigrams[1:20,2],col="lightblue",
+        names.arg = trigrams$Var1[1:20],srt = 45,
+        space=0.1, xlim=c(0,20),las=2)
+```
+##How many unique words do you need in a frequency sorted dictionary to cover 50% of all word instances in the language? 90%?
+```{r}
+sumCover <- 0
+for(i in 1:length(onegrams$Freq)) {
+  sumCover <- sumCover + onegrams$Freq[i]
+  if(sumCover >= 0.5*sum(onegrams$Freq)){break}
+}
+print(i)
+```
+```{r}
+sumCover <- 0
+for(i in 1:length(onegrams$Freq)) {
+  sumCover <- sumCover + onegrams$Freq[i]
+  if(sumCover >= 0.9*sum(onegrams$Freq)){break}
+}
+print(i)
+```
+Owing to this, we need 140 words to cover 50% of all word instances in the language and 5239 words to cover 90% of all word instances in the language.
+
